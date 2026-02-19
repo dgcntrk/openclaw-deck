@@ -5,8 +5,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--theme-border);
+  background: var(--theme-columnBg);
   animation: columnSlideIn 0.4s ease both;
   position: relative;
 }
@@ -14,7 +14,7 @@
 /* Bottom status bar removed per preference */
 
 .column:nth-child(even) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--theme-columnBgAlt);
 }
 
 .column:hover {
@@ -35,12 +35,12 @@
 /* ─── Header ─── */
 .header {
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--theme-border);
   display: flex;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--theme-headerBg);
 }
 
 .agentIcon {
@@ -108,8 +108,8 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-borderLight);
+  background: var(--theme-columnBg);
   color: var(--theme-textMuted);
   cursor: pointer;
   font-size: 13px;
@@ -120,7 +120,7 @@
 }
 
 .headerBtn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--theme-columnBg);
   color: var(--theme-textSecondary);
 }
 
@@ -178,12 +178,12 @@
 }
 
 .messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--theme-columnBgAlt);
   border-radius: 2px;
 }
 
 .messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--theme-codeBg);
 }
 
 /* ─── Message Bubbles ─── */
@@ -213,7 +213,7 @@
 }
 
 .assistantMsg .roleLabel {
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--theme-textMuted);
 }
 
 .userMsg .roleLabel {
@@ -228,15 +228,15 @@
   white-space: pre-wrap;
   word-break: break-word;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--theme-columnBg);
+  border: 1px solid var(--theme-borderLight);
   padding: 4px 6px;
 }
 
 .userMsg .messageText {
   font-size: 12px;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--theme-text);
   font-family: "JetBrains Mono", monospace;
   background: rgba(34, 211, 238, 0.11);
   border: 1px solid rgba(34, 211, 238, 0.35);
@@ -304,8 +304,8 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 0.9em;
   line-height: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--theme-columnBgAlt);
+  border: 1px solid var(--theme-inputBorder);
   border-radius: 6px;
   padding: 0.05em 0.28em;
 }
@@ -315,7 +315,7 @@
   padding: 0.24em 0.4em;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--theme-border);
   overflow-x: auto;
 }
 
@@ -328,8 +328,8 @@
 .assistantMsg .messageText blockquote {
   margin: 0.12em 0;
   padding: 0 0 0 0.5em;
-  border-left: 3px solid rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.82);
+  border-left: 3px solid var(--theme-quoteBorder);
+  color: var(--theme-textSecondary);
 }
 
 .assistantMsg .messageText a {
@@ -426,9 +426,9 @@
 
 /* ─── Input ─── */
 .inputArea {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--theme-border);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--theme-columnBg);
   position: relative;
 }
 
@@ -436,16 +436,16 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--theme-inputBg);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--theme-inputBorder);
   padding: 8px 12px;
   margin: 10px 12px;
   transition: border-color 0.15s ease;
 }
 
 .inputWrapper:focus-within {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: var(--theme-inputFocus);
 }
 
 .input {
@@ -453,7 +453,7 @@
   background: transparent;
   border: none;
   outline: none;
-  color: rgba(255, 255, 255, 0.96);
+  color: var(--theme-text);
   font-size: 14px;
   font-family: "DM Sans", sans-serif;
   line-height: 1.5;
@@ -475,7 +475,7 @@
   height: 28px;
   border-radius: 6px;
   border: none;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--theme-columnBg);
   color: var(--theme-textMuted);
   cursor: default;
   font-size: 14px;
@@ -523,7 +523,7 @@
 .compactionLine {
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--theme-columnBgAlt);
 }
 
 .compactionLabel {
@@ -540,8 +540,8 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--theme-borderLight);
+  background: var(--theme-columnBg);
   color: var(--theme-textMuted);
   cursor: pointer;
   font-size: 15px;
