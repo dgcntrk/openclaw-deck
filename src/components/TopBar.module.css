@@ -120,6 +120,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ─── Handoff Button ─── */
+.handoffBtn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-border);
+  background: transparent;
+  color: var(--theme-textMuted);
+  font-size: 12px;
+  font-family: "DM Sans", sans-serif;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.handoffBtn:hover {
+  background: var(--theme-inputBg);
+  color: var(--theme-textSecondary);
+}
+
 /* ─── Add Button ─── */
 .addBtn {
   padding: 6px 12px;
