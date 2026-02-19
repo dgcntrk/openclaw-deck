@@ -1,7 +1,6 @@
 export interface Theme {
   id: string;
   name: string;
-  variant: 'light' | 'dark';
   colors: {
     bg: string;
     bgSecondary: string;
@@ -30,7 +29,6 @@ export interface Theme {
 export const themes: Record<string, Theme> = {
   midnight: {
     id: 'midnight',
-    variant: 'dark' as const,
     name: 'Midnight',
     colors: {
       bg: '#12151d',
@@ -59,7 +57,6 @@ export const themes: Record<string, Theme> = {
 
   ocean: {
     id: 'ocean',
-    variant: 'dark' as const,
     name: 'Ocean Depths',
     colors: {
       bg: '#0a1929',
@@ -88,7 +85,6 @@ export const themes: Record<string, Theme> = {
 
   forest: {
     id: 'forest',
-    variant: 'dark' as const,
     name: 'Forest Night',
     colors: {
       bg: '#0d1b0f',
@@ -117,7 +113,6 @@ export const themes: Record<string, Theme> = {
 
   sunset: {
     id: 'sunset',
-    variant: 'dark' as const,
     name: 'Sunset Glow',
     colors: {
       bg: '#1a0e13',
@@ -146,7 +141,6 @@ export const themes: Record<string, Theme> = {
 
   slate: {
     id: 'slate',
-    variant: 'dark' as const,
     name: 'Slate Gray',
     colors: {
       bg: '#1e293b',
@@ -175,7 +169,6 @@ export const themes: Record<string, Theme> = {
 
   purple: {
     id: 'purple',
-    variant: 'dark' as const,
     name: 'Purple Haze',
     colors: {
       bg: '#1a0d2e',
@@ -204,7 +197,6 @@ export const themes: Record<string, Theme> = {
 
   cyber: {
     id: 'cyber',
-    variant: 'dark' as const,
     name: 'Cyberpunk',
     colors: {
       bg: '#0a0e27',
@@ -233,7 +225,6 @@ export const themes: Record<string, Theme> = {
 
   rose: {
     id: 'rose',
-    variant: 'dark' as const,
     name: 'Rose Garden',
     colors: {
       bg: '#1f0d15',
@@ -262,7 +253,6 @@ export const themes: Record<string, Theme> = {
 
   abyss: {
     id: 'abyss',
-    variant: 'dark' as const,
     name: 'Abyss (Ultra Dark)',
     colors: {
       bg: '#000000',
@@ -291,7 +281,6 @@ export const themes: Record<string, Theme> = {
 
   darcula: {
     id: 'darcula',
-    variant: 'dark' as const,
     name: 'Darcula (JetBrains)',
     colors: {
       bg: '#2b2b2b',
@@ -320,7 +309,6 @@ export const themes: Record<string, Theme> = {
 
   dracula: {
     id: 'dracula',
-    variant: 'dark' as const,
     name: 'Dracula',
     colors: {
       bg: '#282a36',
@@ -349,7 +337,6 @@ export const themes: Record<string, Theme> = {
 
   nord: {
     id: 'nord',
-    variant: 'dark' as const,
     name: 'Nord',
     colors: {
       bg: '#2e3440',
@@ -378,7 +365,6 @@ export const themes: Record<string, Theme> = {
 
   gruvboxDark: {
     id: 'gruvboxDark',
-    variant: 'dark' as const,
     name: 'Gruvbox Dark',
     colors: {
       bg: '#282828',
@@ -407,7 +393,6 @@ export const themes: Record<string, Theme> = {
 
   monokai: {
     id: 'monokai',
-    variant: 'dark' as const,
     name: 'Monokai',
     colors: {
       bg: '#272822',
@@ -433,102 +418,10 @@ export const themes: Record<string, Theme> = {
       link: '#66d9ef',
     }
   },
-
-  githubLight: {
-    id: 'githubLight',
-    variant: 'light' as const,
-    name: 'GitHub Light',
-    colors: {
-      bg: '#ffffff',
-      bgSecondary: '#f6f8fa',
-      bgTertiary: '#fafbfc',
-      text: '#24292f',
-      textSecondary: '#57606a',
-      textMuted: '#6e7781',
-      border: '#d0d7de',
-      borderLight: '#eaeef2',
-      scrollbar: '#d0d7de',
-      scrollbarTrack: '#f6f8fa',
-      columnBg: '#f6f8fa',
-      columnBgAlt: '#eaeef2',
-      columnHover: 'rgba(208, 215, 222, 0.3)',
-      headerBg: '#f6f8fa',
-      inputBg: '#ffffff',
-      inputBorder: '#d0d7de',
-      inputFocus: '#0969da',
-      codeBg: '#f6f8fa',
-      codeBlockBg: '#f6f8fa',
-      quoteBorder: '#d0d7de',
-      link: '#0969da',
-    }
-  },
-
-  solarizedLight: {
-    id: 'solarizedLight',
-    variant: 'light' as const,
-    name: 'Solarized Light',
-    colors: {
-      bg: '#fdf6e3',
-      bgSecondary: '#eee8d5',
-      bgTertiary: '#f9f2d5',
-      text: '#657b83',
-      textSecondary: '#586e75',
-      textMuted: '#93a1a1',
-      border: '#d3cbb7',
-      borderLight: '#e3dcc8',
-      scrollbar: '#93a1a1',
-      scrollbarTrack: '#eee8d5',
-      columnBg: '#eee8d5',
-      columnBgAlt: '#e3dcc8',
-      columnHover: 'rgba(147, 161, 161, 0.2)',
-      headerBg: '#eee8d5',
-      inputBg: '#fdf6e3',
-      inputBorder: '#d3cbb7',
-      inputFocus: '#268bd2',
-      codeBg: '#eee8d5',
-      codeBlockBg: '#e3dcc8',
-      quoteBorder: '#859900',
-      link: '#268bd2',
-    }
-  },
-
-  gruvboxLight: {
-    id: 'gruvboxLight',
-    variant: 'light' as const,
-    name: 'Gruvbox Light',
-    colors: {
-      bg: '#fbf1c7',
-      bgSecondary: '#ebdbb2',
-      bgTertiary: '#f2e5bc',
-      text: '#3c3836',
-      textSecondary: '#504945',
-      textMuted: '#7c6f64',
-      border: '#bdae93',
-      borderLight: '#d5c4a1',
-      scrollbar: '#bdae93',
-      scrollbarTrack: '#ebdbb2',
-      columnBg: '#ebdbb2',
-      columnBgAlt: '#d5c4a1',
-      columnHover: 'rgba(152, 151, 26, 0.15)',
-      headerBg: '#ebdbb2',
-      inputBg: '#fbf1c7',
-      inputBorder: '#bdae93',
-      inputFocus: '#98971a',
-      codeBg: '#ebdbb2',
-      codeBlockBg: '#d5c4a1',
-      quoteBorder: '#98971a',
-      link: '#076678',
-    }
-  },
 };
 
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  
-  // Set theme variant as data attribute
-  root.setAttribute('data-theme-variant', theme.variant);
-  
-  // Apply all color variables
   Object.entries(theme.colors).forEach(([key, value]) => {
     root.style.setProperty(`--theme-${key}`, value);
   });
