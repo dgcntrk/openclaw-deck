@@ -187,6 +187,50 @@ The build output will be in `dist/` and preview will run at http://localhost:417
 
 ---
 
+## Updating OpenClaw Deck
+
+To update to the latest version:
+
+```bash
+cd ~/openclaw-deck
+
+# Pull latest changes
+git pull origin main
+
+# Update dependencies
+npm install
+
+# Restart the dev server
+npm run dev
+```
+
+### If you get conflicts during `git pull`:
+
+```bash
+# Stash local changes first
+git stash
+
+# Pull again
+git pull origin main
+
+# Reapply your changes (optional)
+git stash pop
+```
+
+### If the dev server was already running:
+
+- Kill the old process first (Ctrl+C in the terminal, or `pkill -f "openclaw-deck"`)
+- Then restart with `npm run dev`
+
+### Check for breaking changes:
+
+- Look for any `CHANGELOG.md` or `MIGRATION.md` files after pulling
+- Check the terminal output when `npm install` runs for deprecation warnings
+
+**Update time:** ~30 seconds unless there are conflicts or major dependency updates.
+
+---
+
 ## Usage
 
 ### Basic Chat

@@ -8,7 +8,7 @@
   background: transparent;
   font-size: 11px;
   font-family: "JetBrains Mono", monospace;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--theme-textMuted);
   gap: 16px;
 }
 

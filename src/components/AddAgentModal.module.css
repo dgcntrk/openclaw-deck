@@ -32,7 +32,7 @@
 .title {
   font-size: 15px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--theme-text);
   margin-bottom: 20px;
 }
 
@@ -105,7 +105,7 @@
 }
 
 .colorSwatchActive {
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: var(--theme-textMuted);
 }
 
 .select {
@@ -148,7 +148,7 @@
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: transparent;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--theme-textMuted);
   font-size: 12px;
   font-family: "DM Sans", sans-serif;
   cursor: pointer;
@@ -157,7 +157,7 @@
 
 .cancelBtn:hover {
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--theme-textSecondary);
 }
 
 .createBtn {
@@ -165,7 +165,7 @@
   border-radius: 6px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--theme-text);
   font-size: 12px;
   font-weight: 600;
   font-family: "DM Sans", sans-serif;

@@ -1,6 +1,7 @@
 export interface Theme {
   id: string;
   name: string;
+  variant: 'light' | 'dark';
   colors: {
     bg: string;
     bgSecondary: string;
@@ -29,6 +30,7 @@ export interface Theme {
 export const themes: Record<string, Theme> = {
   midnight: {
     id: 'midnight',
+    variant: 'dark' as const,
     name: 'Midnight',
     colors: {
       bg: '#12151d',
@@ -57,6 +59,7 @@ export const themes: Record<string, Theme> = {
 
   ocean: {
     id: 'ocean',
+    variant: 'dark' as const,
     name: 'Ocean Depths',
     colors: {
       bg: '#0a1929',
@@ -85,6 +88,7 @@ export const themes: Record<string, Theme> = {
 
   forest: {
     id: 'forest',
+    variant: 'dark' as const,
     name: 'Forest Night',
     colors: {
       bg: '#0d1b0f',
@@ -113,6 +117,7 @@ export const themes: Record<string, Theme> = {
 
   sunset: {
     id: 'sunset',
+    variant: 'dark' as const,
     name: 'Sunset Glow',
     colors: {
       bg: '#1a0e13',
@@ -141,6 +146,7 @@ export const themes: Record<string, Theme> = {
 
   slate: {
     id: 'slate',
+    variant: 'dark' as const,
     name: 'Slate Gray',
     colors: {
       bg: '#1e293b',
@@ -169,6 +175,7 @@ export const themes: Record<string, Theme> = {
 
   purple: {
     id: 'purple',
+    variant: 'dark' as const,
     name: 'Purple Haze',
     colors: {
       bg: '#1a0d2e',
@@ -197,6 +204,7 @@ export const themes: Record<string, Theme> = {
 
   cyber: {
     id: 'cyber',
+    variant: 'dark' as const,
     name: 'Cyberpunk',
     colors: {
       bg: '#0a0e27',
@@ -225,6 +233,7 @@ export const themes: Record<string, Theme> = {
 
   rose: {
     id: 'rose',
+    variant: 'dark' as const,
     name: 'Rose Garden',
     colors: {
       bg: '#1f0d15',
@@ -253,6 +262,7 @@ export const themes: Record<string, Theme> = {
 
   abyss: {
     id: 'abyss',
+    variant: 'dark' as const,
     name: 'Abyss (Ultra Dark)',
     colors: {
       bg: '#000000',
@@ -281,6 +291,7 @@ export const themes: Record<string, Theme> = {
 
   darcula: {
     id: 'darcula',
+    variant: 'dark' as const,
     name: 'Darcula (JetBrains)',
     colors: {
       bg: '#2b2b2b',
@@ -309,6 +320,7 @@ export const themes: Record<string, Theme> = {
 
   dracula: {
     id: 'dracula',
+    variant: 'dark' as const,
     name: 'Dracula',
     colors: {
       bg: '#282a36',
@@ -337,6 +349,7 @@ export const themes: Record<string, Theme> = {
 
   nord: {
     id: 'nord',
+    variant: 'dark' as const,
     name: 'Nord',
     colors: {
       bg: '#2e3440',
@@ -365,6 +378,7 @@ export const themes: Record<string, Theme> = {
 
   gruvboxDark: {
     id: 'gruvboxDark',
+    variant: 'dark' as const,
     name: 'Gruvbox Dark',
     colors: {
       bg: '#282828',
@@ -393,6 +407,7 @@ export const themes: Record<string, Theme> = {
 
   monokai: {
     id: 'monokai',
+    variant: 'dark' as const,
     name: 'Monokai',
     colors: {
       bg: '#272822',
@@ -421,6 +436,7 @@ export const themes: Record<string, Theme> = {
 
   githubLight: {
     id: 'githubLight',
+    variant: 'light' as const,
     name: 'GitHub Light',
     colors: {
       bg: '#ffffff',
@@ -449,6 +465,7 @@ export const themes: Record<string, Theme> = {
 
   solarizedLight: {
     id: 'solarizedLight',
+    variant: 'light' as const,
     name: 'Solarized Light',
     colors: {
       bg: '#fdf6e3',
@@ -477,6 +494,7 @@ export const themes: Record<string, Theme> = {
 
   gruvboxLight: {
     id: 'gruvboxLight',
+    variant: 'light' as const,
     name: 'Gruvbox Light',
     colors: {
       bg: '#fbf1c7',
@@ -506,6 +524,11 @@ export const themes: Record<string, Theme> = {
 
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
+  
+  // Set theme variant as data attribute
+  root.setAttribute('data-theme-variant', theme.variant);
+  
+  // Apply all color variables
   Object.entries(theme.colors).forEach(([key, value]) => {
     root.style.setProperty(`--theme-${key}`, value);
   });

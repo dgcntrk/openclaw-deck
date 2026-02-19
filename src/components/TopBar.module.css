@@ -42,14 +42,14 @@
 .logoText {
   font-size: 15px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--theme-text);
   letter-spacing: -0.02em;
 }
 
 .logoBadge {
   font-size: 10px;
   font-family: "JetBrains Mono", monospace;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--theme-textMuted);
   background: rgba(255, 255, 255, 0.08);
   padding: 2px 6px;
   border-radius: 4px;
@@ -68,7 +68,7 @@
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--theme-textMuted);
   font-size: 13px;
   font-family: "DM Sans", sans-serif;
   font-weight: 500;
@@ -78,12 +78,12 @@
 
 .tab:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--theme-text);
 }
 
 .tabActive {
   background: rgba(255, 255, 255, 0.16);
-  color: rgba(255, 255, 255, 1);
+  color: var(--theme-text);
 }
 
 .tabCount {
@@ -99,7 +99,7 @@
   gap: 20px;
   font-size: 11px;
   font-family: "JetBrains Mono", monospace;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--theme-textMuted);
   margin-right: 16px;
 }
 
@@ -116,7 +116,7 @@
 }
 
 .statValue {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--theme-textMuted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -126,7 +126,7 @@
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--theme-textMuted);
   font-size: 12px;
   font-family: "DM Sans", sans-serif;
   cursor: pointer;
@@ -138,7 +138,7 @@
 
 .addBtn:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--theme-textSecondary);
 }
 
 .addBtn span {
