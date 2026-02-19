@@ -16,6 +16,10 @@ export default defineConfig({
         target: "http://127.0.0.1:18789",
         changeOrigin: true,
       },
+      "/api/config": {
+        target: "http://127.0.0.1:18789",
+        changeOrigin: true,
+      },
     },
   },
 });

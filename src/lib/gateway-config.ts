@@ -1,12 +1,16 @@
 import type { AgentConfig } from "../types";
 
+const ENV_DEFAULT_MODEL = (import.meta.env.VITE_DEFAULT_MODEL as string | undefined)?.trim();
+
 // Fallback model if gateway fetch fails
-export const FALLBACK_MODEL = "claude-sonnet-4-5";
+export const FALLBACK_MODEL = ENV_DEFAULT_MODEL || "anthropic/claude-opus-4-6";
 
 // Fallback models list for AddAgentModal
 export const FALLBACK_MODELS = [
-  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
+  { id: "anthropic/claude-opus-4-6", name: "Opus 4.6" },
+  { id: "anthropic/claude-sonnet-4-5", name: "Sonnet 4.5" },
+  { id: "moonshot/kimi-k2.5", name: "Kimi K2.5" },
+  { id: "kimi-coding/k2p5", name: "Kimi K2.5 (Coding)" },
 ];
 
 export interface GatewayInfo {
@@ -14,45 +18,59 @@ export interface GatewayInfo {
   availableModels: Array<{ id: string; name: string }>;
 }
 
+function normalizeModelMap(config: any): Array<{ id: string; name: string }> {
+  const models =
+    config?.agents?.defaults?.models ||
+    config?.agents?.models ||
+    config?.models ||
+    {};
+
+  if (!models || typeof models !== "object") return [];
+
+  return Object.entries(models).map(([id, info]: [string, any]) => ({
+    id,
+    name: info?.alias || info?.name || id.split("/").pop() || id,
+  }));
+}
+
+async function fetchConfigJson(url: string, headers: Record<string, string>) {
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`${url} -> non-JSON response (${contentType || "unknown"})`);
+  }
+
+  return res.json();
+}
+
 /**
  * Fetch gateway configuration including available models.
- * Falls back to hardcoded defaults if fetch fails.
+ * Falls back to hardcoded/env defaults if fetch fails.
  */
 export async function fetchGatewayConfig(
   gatewayUrl: string,
   token?: string
 ): Promise<GatewayInfo> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   try {
-    // Use relative path to go through Vite proxy and avoid CORS
-    const configUrl = "/config";
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    };
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+    // Try common proxied paths; some setups expose one but not the other.
+    let config: any;
+    try {
+      config = await fetchConfigJson("/config", headers);
+    } catch {
+      config = await fetchConfigJson("/api/config", headers);
     }
 
-    const response = await fetch(configUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const config = await response.json();
-
-    // Extract models from gateway config
-    const models = config.agents?.defaults?.models || {};
-    const modelList = Object.entries(models).map(([id, info]: [string, unknown]) => {
-      const modelInfo = info as { alias?: string };
-      return {
-        id,
-        name: modelInfo.alias || id.split("/").pop() || id,
-      };
-    });
-
-    // Get default model from primary config
+    const modelList = normalizeModelMap(config);
     const defaultModel =
-      config.agents?.defaults?.model?.primary ||
+      config?.agents?.defaults?.model?.primary ||
+      config?.agents?.defaults?.model ||
       modelList[0]?.id ||
       FALLBACK_MODEL;
 
@@ -61,7 +79,7 @@ export async function fetchGatewayConfig(
       availableModels: modelList.length > 0 ? modelList : FALLBACK_MODELS,
     };
   } catch (err) {
-    console.warn("[GatewayConfig] Failed to fetch, using fallback:", err);
+    console.warn("[GatewayConfig] Failed to fetch models, using fallback:", err);
     return {
       defaultModel: FALLBACK_MODEL,
       availableModels: FALLBACK_MODELS,
