@@ -62,6 +62,65 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Convert raw gateway chat.history messages into ChatMessage[] */
+function parseHistoryMessages(
+  raw?: Array<{
+    role?: string;
+    content?: Array<{ type?: string; text?: string }> | string;
+    timestamp?: number;
+    __openclaw?: { kind?: string };
+  }>
+): ChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  const result: ChatMessage[] = [];
+  for (const msg of raw) {
+    const role = msg.role;
+    if (!role) continue;
+
+    // Skip tool/function messages and compaction markers
+    if (role === "tool" || role === "toolresult" || role === "function") continue;
+    if (msg.__openclaw?.kind === "compaction") continue;
+
+    // Extract text content
+    let text = "";
+    if (Array.isArray(msg.content)) {
+      text = msg.content
+        .filter((p) => p.type === "text" && p.text)
+        .map((p) => p.text)
+        .join("");
+    } else if (typeof msg.content === "string") {
+      text = msg.content;
+    }
+
+    // Skip empty, heartbeat, and NO_REPLY messages
+    if (!text.trim()) continue;
+    if (/HEARTBEAT_OK|heartbeat|NO_REPLY/i.test(text)) continue;
+
+    // Map role to ChatMessage role
+    let chatRole: ChatMessage["role"];
+    if (role === "user") {
+      chatRole = "user";
+    } else if (role === "assistant") {
+      chatRole = "assistant";
+    } else if (role === "system") {
+      chatRole = "announcement";
+    } else {
+      continue;
+    }
+
+    result.push({
+      id: makeId(),
+      role: chatRole,
+      text,
+      timestamp: msg.timestamp ?? Date.now(),
+      announcement: chatRole === "announcement",
+    });
+  }
+
+  return result;
+}
+
 // ─── Store ───
 
 export const useDeckStore = create<DeckStore>((set, get) => ({
@@ -96,6 +155,48 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
             sessions[id] = { ...sessions[id], connected: true };
           }
           set({ sessions });
+
+          // Load chat history for sessions that have no messages
+          for (const agentId of Object.keys(sessions)) {
+            if (sessions[agentId].messages.length > 0) continue;
+            const sessionKey = `agent:main:${agentId}`;
+            client
+              .chatHistory(sessionKey, 50)
+              .then((res) => {
+                const data = res as {
+                  messages?: Array<{
+                    role?: string;
+                    content?:
+                      | Array<{ type?: string; text?: string }>
+                      | string;
+                    timestamp?: number;
+                    __openclaw?: { kind?: string };
+                  }>;
+                };
+                const historyMsgs = parseHistoryMessages(data?.messages);
+                if (historyMsgs.length === 0) return;
+
+                set((state) => {
+                  const session = state.sessions[agentId];
+                  if (!session || session.messages.length > 0) return state;
+                  return {
+                    sessions: {
+                      ...state.sessions,
+                      [agentId]: {
+                        ...session,
+                        messages: historyMsgs,
+                      },
+                    },
+                  };
+                });
+              })
+              .catch((err) => {
+                console.warn(
+                  `[DeckStore] Failed to load history for ${agentId}:`,
+                  err
+                );
+              });
+          }
         }
       },
     });
@@ -289,6 +390,42 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
         } else if (stream === "lifecycle") {
           const phase = data?.phase as string | undefined;
           if (phase === "start") {
+            // Check if a placeholder message already exists for this runId
+            const session = get().sessions[agentId];
+            const hasPlaceholder = session?.messages.some(
+              (msg) => msg.runId === runId
+            );
+
+            if (!hasPlaceholder && session) {
+              // Server-initiated turn (sub-agent announcement) — no
+              // placeholder was created by sendMessage(). Create one now
+              // so streaming chunks have somewhere to land.
+              const isAnnouncement = session.status === "idle";
+              const placeholderMsg: ChatMessage = {
+                id: makeId(),
+                role: isAnnouncement ? "announcement" : "assistant",
+                text: "",
+                timestamp: Date.now(),
+                streaming: true,
+                runId,
+                announcement: isAnnouncement,
+              };
+
+              set((state) => ({
+                sessions: {
+                  ...state.sessions,
+                  [agentId]: {
+                    ...state.sessions[agentId],
+                    messages: [
+                      ...state.sessions[agentId].messages,
+                      placeholderMsg,
+                    ],
+                    activeRunId: runId,
+                  },
+                },
+              }));
+            }
+
             get().setAgentStatus(agentId, "thinking");
           } else if (phase === "end") {
             get().finalizeMessage(agentId, runId);
@@ -379,6 +516,90 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
                   ...session,
                   usage,
                   tokenCount: usage.totalTokens,
+                },
+              },
+            };
+          });
+        }
+        break;
+      }
+
+      // Chat events — server-initiated messages (sub-agent announcements, cron results)
+      // These arrive for ALL session messages; we only render ones not already
+      // tracked by the 'agent' event handler.
+      case "chat": {
+        const state = payload.state as string | undefined;
+        const runId = payload.runId as string | undefined;
+        const sessionKey = (payload.sessionKey ?? payload.session) as string | undefined;
+
+        // Extract column ID from sessionKey "agent:main:<columnId>"
+        const parts = sessionKey?.split(":") ?? [];
+        const agentId = parts[2] ?? parts[1] ?? "main";
+
+        const session = get().sessions[agentId];
+        if (!session) break;
+
+        // Skip delta/error/aborted — only act on "final" completed messages
+        if (state !== "final") break;
+
+        // Extract text from the message content array
+        const message = (payload.message ?? payload.data ?? payload.content) as Record<string, unknown> | null | undefined;
+        if (!message) break;
+
+        const role = message.role as string | undefined;
+        const contentParts = (message.content ?? message.text ?? message.body) as
+          | Array<{ type?: string; text?: string }>
+          | string
+          | undefined;
+
+        let text = "";
+        if (Array.isArray(contentParts)) {
+          text = contentParts
+            .filter((p) => p.type === "text" && p.text)
+            .map((p) => p.text)
+            .join("");
+        } else if (typeof contentParts === "string") {
+          text = contentParts;
+        }
+
+        // WHITELIST FILTER — skip noise
+        if (!text.trim()) break;
+        if (/HEARTBEAT_OK|heartbeat/i.test(text)) break;
+        if (role === "tool" || role === "function") break;
+
+        // Dedup: skip if this runId is already tracked by the 'agent' handler
+        if (runId && session.messages.some((m) => m.runId === runId)) break;
+
+        // Dedup: skip if the last message has identical text within 5 seconds
+        const lastMsg = session.messages[session.messages.length - 1];
+        if (
+          lastMsg &&
+          lastMsg.text === text &&
+          Date.now() - lastMsg.timestamp < 5000
+        ) {
+          break;
+        }
+
+        // Only render assistant/system messages (server-initiated)
+        if (role === "assistant" || role === "system") {
+          const announcementMsg: ChatMessage = {
+            id: makeId(),
+            role: "announcement",
+            text,
+            timestamp: Date.now(),
+            announcement: true,
+            runId: runId ?? undefined,
+          };
+
+          set((s) => {
+            const sess = s.sessions[agentId];
+            if (!sess) return s;
+            return {
+              sessions: {
+                ...s.sessions,
+                [agentId]: {
+                  ...sess,
+                  messages: [...sess.messages, announcementMsg],
                 },
               },
             };

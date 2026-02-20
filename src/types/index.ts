@@ -55,7 +55,7 @@ export interface AgentConfig {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "system" | "compaction";
+  role: "user" | "assistant" | "system" | "compaction" | "announcement";
   text: string;
   timestamp: number;
   /** If assistant is still streaming this message */
@@ -75,6 +75,8 @@ export interface ChatMessage {
     afterTokens: number;
     droppedMessages: number;
   };
+  /** True when this message is a sub-agent announcement (server-initiated) */
+  announcement?: boolean;
 }
 
 export interface SessionUsage {

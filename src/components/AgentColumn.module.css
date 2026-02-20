@@ -535,6 +535,88 @@
   letter-spacing: 0.04em;
 }
 
+/* ─── Announcement Bubble ─── */
+.announcementBubble {
+  padding: 2px 10px 4px;
+  margin-top: 6px;
+}
+
+.announcementBubble + .messageBubble,
+.messageBubble + .announcementBubble {
+  margin-top: 16px;
+}
+
+.announcementLabel {
+  font-size: 10px;
+  font-family: "JetBrains Mono", monospace;
+  color: #f59e0b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 1px;
+}
+
+.announcementText {
+  font-size: 16px;
+  line-height: 1.22;
+  color: var(--theme-textSecondary);
+  white-space: normal;
+  word-break: break-word;
+  border-radius: 12px;
+  background: var(--theme-columnBg);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-left: 3px solid #f59e0b;
+  padding: 4px 6px;
+}
+
+.announcementText :is(h1, h2, h3, h4) {
+  margin: 0.5em 0 0 0;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.announcementText p {
+  margin: 12px 0;
+  line-height: 1.22;
+}
+
+.announcementText > :first-child {
+  margin-top: 0 !important;
+}
+
+.announcementText > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.announcementText code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.9em;
+  line-height: 1;
+  background: var(--theme-columnBgAlt);
+  border: 1px solid var(--theme-inputBorder);
+  border-radius: 6px;
+  padding: 0.05em 0.28em;
+}
+
+.announcementText pre {
+  margin: 0.12em 0;
+  padding: 0.24em 0.4em;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--theme-border);
+  overflow-x: auto;
+}
+
+.announcementText pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.announcementText a {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
 /* ─── Delete Button ─── */
 .deleteBtn {
   width: 28px;

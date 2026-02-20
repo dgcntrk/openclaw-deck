@@ -125,6 +125,36 @@ function MessageBubble({
   );
 }
 
+// ─── Announcement Bubble ───
+
+function AnnouncementBubble({
+  message,
+}: {
+  message: ChatMessage;
+}) {
+  return (
+    <div className={styles.announcementBubble}>
+      <div className={styles.announcementLabel}>🔔 Sub-agent</div>
+      <div className={styles.announcementText}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeHighlight]}
+          components={{
+            a: ({ node, ...props }) => (
+              <a {...props} target="_blank" rel="noopener noreferrer" />
+            ),
+          }}
+        >
+          {message.text}
+        </ReactMarkdown>
+        {message.streaming && (
+          <span className={styles.cursor} style={{ backgroundColor: "#f59e0b" }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Compaction Divider ───
 
 function CompactionDivider({ message }: { message: ChatMessage }) {
@@ -318,6 +348,8 @@ export function AgentColumn({ agentId, columnIndex }: { agentId: string; columnI
         {session.messages.map((msg) =>
           msg.role === "compaction" ? (
             <CompactionDivider key={msg.id} message={msg} />
+          ) : msg.role === "announcement" ? (
+            <AnnouncementBubble key={msg.id} message={msg} />
           ) : (
             <MessageBubble key={msg.id} message={msg} accent={config.accent} />
           )

@@ -183,6 +183,11 @@ export class GatewayClient {
     });
   }
 
+  /** Fetch chat history for a session */
+  async chatHistory(sessionKey: string, limit?: number): Promise<unknown> {
+    return this.request("chat.history", { sessionKey, limit: limit ?? 50 });
+  }
+
   /** Get current gateway health */
   async health(): Promise<unknown> {
     return this.request("health");
