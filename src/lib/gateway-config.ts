@@ -110,8 +110,8 @@ export function buildDefaultAgents(
   ];
 
   return Array.from({ length: count }, (_, i) => {
-    const agentId = i === 0 ? "main" : `agent-${i + 1}`;
-    const agentName = i === 0 ? "Main" : `Agent ${i + 1}`;
+    const agentId = i === 0 ? "main" : `main-${i + 1}`;
+    const agentName = i === 0 ? "Main" : `Main ${i + 1}`;
 
     return {
       id: agentId,

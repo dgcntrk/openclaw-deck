@@ -15,7 +15,7 @@ function getGatewayConfig() {
   let gatewayUrl =
     params.get("gateway") ||
     import.meta.env.VITE_GATEWAY_URL ||
-    "ws://127.0.0.1:18789";
+    "/ws";
 
   // Resolve relative paths (e.g. "/ws") to full WebSocket URLs
   if (gatewayUrl.startsWith("/")) {

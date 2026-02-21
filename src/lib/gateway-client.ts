@@ -63,6 +63,7 @@ export class GatewayClient {
   private intentionalClose = false;
   private _connected = false;
   private msgCounter = 0;
+  private pendingChallengeNonce: string | null = null;
 
   constructor(opts: GatewayClientOptions) {
     this.options = {
@@ -223,6 +224,7 @@ export class GatewayClient {
   // ─── Private ───
 
   private createSocket() {
+    this.pendingChallengeNonce = null;
     try {
       this.ws = new WebSocket(this.options.url);
     } catch (err) {
@@ -234,14 +236,7 @@ export class GatewayClient {
     this.ws.onopen = async () => {
       console.log("[GatewayClient] Socket opened, sending handshake...");
       try {
-        let device: { id: string; publicKey: string; signature: string; signedAt: number } | undefined;
-        try {
-          device = await this.buildSignedDeviceIdentity();
-        } catch (deviceErr) {
-          console.warn("[GatewayClient] Device identity unavailable; falling back to token-only auth:", deviceErr);
-        }
-
-        const hello = (await this.request("connect", {
+        const baseParams = {
           client: {
             id: "openclaw-control-ui",
             version: "2026.2.16",
@@ -255,8 +250,55 @@ export class GatewayClient {
           auth: this.getPreferredAuthToken()
             ? { token: this.getPreferredAuthToken() }
             : undefined,
-          ...(device ? { device } : {}),
-        })) as { auth?: { deviceToken?: string } };
+        };
+
+        // Gateways now emit connect.challenge immediately after socket open and
+        // may reject nonce-less device auth within the same RTT. Wait briefly so
+        // we can include nonce on the first connect request.
+        await this.awaitChallengeNonce(200);
+
+        const connectOnce = async (opts?: { nonce?: string; includeDevice?: boolean }) => {
+          const nonce = opts?.nonce;
+          // In authMode=token gateways, sending device auth without a nonce can
+          // trigger hard rejection (device-nonce-missing) even when token auth is valid.
+          // Default to token-only unless a nonce is explicitly available.
+          const includeDevice = opts?.includeDevice ?? Boolean(nonce);
+
+          let device: { id: string; publicKey: string; signature: string; signedAt: number; nonce?: string } | undefined;
+          if (includeDevice) {
+            try {
+              device = await this.buildSignedDeviceIdentity(nonce);
+            } catch (deviceErr) {
+              console.warn("[GatewayClient] Device identity unavailable; falling back to token-only auth:", deviceErr);
+            }
+          }
+
+          return (await this.request("connect", {
+            ...baseParams,
+            ...(device ? { device } : {}),
+          })) as { auth?: { deviceToken?: string } };
+        };
+
+        let hello: { auth?: { deviceToken?: string } };
+        try {
+          hello = await connectOnce();
+        } catch (initialErr) {
+          const initialMessage = initialErr instanceof Error ? initialErr.message : String(initialErr);
+          const nonce = this.pendingChallengeNonce;
+
+          if (nonce) {
+            console.warn("[GatewayClient] Initial handshake failed, retrying with challenge nonce...");
+            hello = await connectOnce({ nonce, includeDevice: true });
+          } else if (/nonce required|device nonce required|device-nonce-missing/i.test(initialMessage)) {
+            await this.awaitChallengeNonce(200);
+            const lateNonce = this.pendingChallengeNonce;
+            if (!lateNonce) throw initialErr;
+            console.warn("[GatewayClient] Device nonce required; retrying with late challenge nonce...");
+            hello = await connectOnce({ nonce: lateNonce, includeDevice: true });
+          } else {
+            throw initialErr;
+          }
+        }
 
         const issuedDeviceToken = hello?.auth?.deviceToken;
         if (issuedDeviceToken) {
@@ -319,6 +361,10 @@ export class GatewayClient {
         break;
       }
       case "event": {
+        if (frame.event === "connect.challenge") {
+          const nonce = (frame.payload as { nonce?: string } | undefined)?.nonce;
+          if (nonce) this.pendingChallengeNonce = nonce;
+        }
         this.options.onEvent(frame);
         break;
       }
@@ -335,6 +381,22 @@ export class GatewayClient {
 
   private nextId(): string {
     return `deck-${++this.msgCounter}-${Date.now()}`;
+  }
+
+  private async awaitChallengeNonce(timeoutMs: number): Promise<void> {
+    if (this.pendingChallengeNonce) return;
+
+    await new Promise<void>((resolve) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        if (this.pendingChallengeNonce || Date.now() - startedAt >= timeoutMs) {
+          resolve();
+          return;
+        }
+        setTimeout(tick, 10);
+      };
+      tick();
+    });
   }
 
   private scheduleReconnect() {
@@ -382,17 +444,18 @@ export class GatewayClient {
     return this.getStoredDeviceToken() || this.options.token || "";
   }
 
-  private async buildSignedDeviceIdentity(): Promise<{
+  private async buildSignedDeviceIdentity(nonce?: string): Promise<{
     id: string;
     publicKey: string;
     signature: string;
     signedAt: number;
+    nonce?: string;
   }> {
     const identity = await this.loadOrCreateDeviceIdentity();
     const signedAt = Date.now();
 
     const payload = this.buildDeviceAuthPayload({
-      version: "v1",
+      version: nonce ? "v2" : "v1",
       deviceId: identity.id,
       clientId: "openclaw-control-ui",
       clientMode: "webchat",
@@ -400,6 +463,7 @@ export class GatewayClient {
       scopes: OPERATOR_SCOPES,
       signedAtMs: signedAt,
       token: this.getPreferredAuthToken() || null,
+      nonce,
     });
 
     const key = await crypto.subtle.importKey(
@@ -421,6 +485,7 @@ export class GatewayClient {
       publicKey: identity.publicKey,
       signature: this.base64UrlEncode(new Uint8Array(signature)),
       signedAt,
+      ...(nonce ? { nonce } : {}),
     };
   }
 

@@ -13,9 +13,21 @@ import { themes, applyTheme } from "../themes";
 
 // ─── Default Config ───
 
+const ENV_GATEWAY_URL = (import.meta.env.VITE_GATEWAY_URL as string | undefined)?.trim();
+const ENV_GATEWAY_TOKEN = (import.meta.env.VITE_GATEWAY_TOKEN as string | undefined)?.trim();
+
+function resolveGatewayUrl(envUrl?: string): string {
+  if (!envUrl) envUrl = "/ws";
+  // Already a full ws:// or wss:// URL
+  if (envUrl.startsWith("ws://") || envUrl.startsWith("wss://")) return envUrl;
+  // Relative path like "/ws" — resolve against current page origin
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}${envUrl}`;
+}
+
 const DEFAULT_CONFIG: DeckConfig = {
-  gatewayUrl: "ws://127.0.0.1:18789",
-  token: undefined,
+  gatewayUrl: resolveGatewayUrl(ENV_GATEWAY_URL),
+  token: ENV_GATEWAY_TOKEN || undefined,
   agents: [],
 };
 
@@ -62,6 +74,72 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Route runIds back to their deck column even when gateway events omit sessionKey.
+const runToAgent = new Map<string, string>();
+
+function agentFromSessionKey(
+  sessionKey: string | undefined,
+  sessions: Record<string, AgentSession>
+): string | null {
+  if (!sessionKey) return null;
+  const parts = sessionKey.split(":");
+
+  // Standard shape: agent:<agentId>:main (e.g. agent:main-3:main)
+  // The agentId is always parts[1]
+  const p1 = parts[1];
+  if (p1 && sessions[p1]) return p1;
+
+  // Subagent/cron sessions: agent:<agentId>:subagent:<uuid> or agent:<agentId>:cron:<uuid>
+  // Already handled by p1 check above
+
+  // Fallback: check parts[2] and last segment
+  const p2 = parts[2];
+  if (p2 && sessions[p2]) return p2;
+
+  const last = parts[parts.length - 1];
+  if (last && sessions[last]) return last;
+
+  return null;
+}
+
+function resolveAgentId(
+  payload: Record<string, unknown>,
+  sessions: Record<string, AgentSession>
+): string {
+  const runId = payload.runId as string | undefined;
+  const sessionKey = (payload.sessionKey ?? payload.session) as string | undefined;
+
+  // 1) Explicit id fields if present
+  const explicit =
+    (payload.agentId as string | undefined) ??
+    (payload.targetAgentId as string | undefined) ??
+    (payload.columnId as string | undefined);
+  if (explicit && sessions[explicit]) return explicit;
+
+  // 2) Session key routing
+  const fromSession = agentFromSessionKey(sessionKey, sessions);
+  if (fromSession) return fromSession;
+
+  // 3) Sticky run routing (critical for events missing sessionKey)
+  if (runId && runToAgent.has(runId)) {
+    return runToAgent.get(runId)!;
+  }
+
+  // 4) Active run fallback
+  if (runId) {
+    for (const [agentId, s] of Object.entries(sessions)) {
+      if (s.activeRunId === runId) return agentId;
+    }
+  }
+
+  // 5) If sessionKey exists but didn't match any column, DROP the event
+  //    by returning a sentinel. This prevents cross-session bleed where
+  //    subagent/cron events from one agent appear in another's column.
+  if (sessionKey) return "__unroutable__";
+
+  return "main";
+}
+
 /** Convert raw gateway chat.history messages into ChatMessage[] */
 function parseHistoryMessages(
   raw?: Array<{
@@ -92,6 +170,9 @@ function parseHistoryMessages(
     } else if (typeof msg.content === "string") {
       text = msg.content;
     }
+
+    // Strip Telegram metadata envelope from user messages
+    text = text.replace(/Conversation info \(untrusted metadata\):\s*```json\s*\{[^}]*\}\s*```\s*/g, "").trim();
 
     // Skip empty, heartbeat, and NO_REPLY messages
     if (!text.trim()) continue;
@@ -159,7 +240,7 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
           // Load chat history for sessions that have no messages
           for (const agentId of Object.keys(sessions)) {
             if (sessions[agentId].messages.length > 0) continue;
-            const sessionKey = `agent:main:${agentId}`;
+            const sessionKey = `agent:${agentId}:main`;
             client
               .chatHistory(sessionKey, 50)
               .then((res) => {
@@ -265,10 +346,10 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
     }));
 
     try {
-      // All columns route through the default "main" agent on the gateway,
-      // using distinct session keys to keep conversations separate.
-      const sessionKey = `agent:main:${agentId}`;
-      const { runId } = await client.runAgent("main", text, sessionKey);
+      // Each column routes to its own agent on the gateway.
+      const sessionKey = `agent:${agentId}:main`;
+      const { runId } = await client.runAgent(agentId, text, sessionKey);
+      runToAgent.set(runId, agentId);
 
       // Create placeholder assistant message for streaming
       const assistantMsg: ChatMessage = {
@@ -343,6 +424,7 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
   },
 
   finalizeMessage: (agentId, runId) => {
+    runToAgent.delete(runId);
     set((state) => {
       const session = state.sessions[agentId];
       if (!session || !session.messages) return state;
@@ -370,7 +452,6 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
 
   handleGatewayEvent: (event) => {
     const payload = event.payload as Record<string, unknown>;
-
     switch (event.event) {
       // Agent streaming events
       // Format: { runId, stream: "assistant"|"lifecycle"|"tool_use", data: {...}, sessionKey: "agent:<id>:<key>" }
@@ -378,11 +459,14 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
         const runId = payload.runId as string;
         const stream = payload.stream as string | undefined;
         const data = payload.data as Record<string, unknown> | undefined;
-        const sessionKey = payload.sessionKey as string | undefined;
+        const agentId = resolveAgentId(payload, get().sessions);
 
-        // Extract column ID from sessionKey "agent:main:<columnId>"
-        const parts = sessionKey?.split(":") ?? [];
-        const agentId = parts[2] ?? parts[1] ?? "main";
+        // Drop events that don't belong to any deck column
+        if (agentId === "__unroutable__") break;
+
+        if (runId) {
+          runToAgent.set(runId, agentId);
+        }
 
         if (stream === "assistant" && data?.delta) {
           get().appendMessageChunk(agentId, runId, data.delta as string);
@@ -390,6 +474,45 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
         } else if (stream === "lifecycle") {
           const phase = data?.phase as string | undefined;
           if (phase === "start") {
+            // Backfill user message: gateway doesn't push user messages
+            // over WS, so fetch latest history to grab the triggering message.
+            const sessionKey = payload.sessionKey as string | undefined;
+            if (sessionKey) {
+              const client = get().client;
+              if (client) {
+                client.chatHistory(sessionKey, 5).then((data: any) => {
+                  const msgs = data?.messages as Array<any> | undefined;
+                  if (!msgs) return;
+                  // Find user messages not yet in deck
+                  const session = get().sessions[agentId];
+                  if (!session) return;
+                  const historyUserMsgs = parseHistoryMessages(
+                    msgs.filter((m: any) => m.role === "user")
+                  );
+                  if (historyUserMsgs.length === 0) return;
+                  // Only add the last user message if not already present
+                  const lastUserMsg = historyUserMsgs[historyUserMsgs.length - 1];
+                  const isDuplicate = session.messages.some(
+                    (m) => m.role === "user" && m.text === lastUserMsg.text && Date.now() - m.timestamp < 30000
+                  );
+                  if (isDuplicate) return;
+                  set((s) => {
+                    const sess = s.sessions[agentId];
+                    if (!sess) return s;
+                    return {
+                      sessions: {
+                        ...s.sessions,
+                        [agentId]: {
+                          ...sess,
+                          messages: [...sess.messages, lastUserMsg],
+                        },
+                      },
+                    };
+                  });
+                }).catch(() => {});
+              }
+            }
+
             // Check if a placeholder message already exists for this runId
             const session = get().sessions[agentId];
             const hasPlaceholder = session?.messages.some(
@@ -467,9 +590,8 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
 
       // Context compaction dividers
       case "compaction": {
-        const sessionKey = payload.sessionKey as string | undefined;
-        const parts = sessionKey?.split(":") ?? [];
-        const agentId = parts[2] ?? parts[1] ?? "main";
+        const agentId = resolveAgentId(payload, get().sessions);
+        if (agentId === "__unroutable__") break;
         const beforeTokens = (payload.beforeTokens as number) ?? 0;
         const afterTokens = (payload.afterTokens as number) ?? 0;
         const droppedMessages = (payload.droppedMessages as number) ?? 0;
@@ -500,9 +622,8 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
 
       // Real usage data from gateway
       case "sessions.usage": {
-        const sessionKey = payload.sessionKey as string | undefined;
-        const parts = sessionKey?.split(":") ?? [];
-        const agentId = parts[2] ?? parts[1] ?? "main";
+        const agentId = resolveAgentId(payload, get().sessions);
+        if (agentId === "__unroutable__") break;
         const usage = payload.usage as SessionUsage | undefined;
 
         if (usage) {
@@ -530,17 +651,17 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
       case "chat": {
         const state = payload.state as string | undefined;
         const runId = payload.runId as string | undefined;
-        const sessionKey = (payload.sessionKey ?? payload.session) as string | undefined;
+        const agentId = resolveAgentId(payload, get().sessions);
 
-        // Extract column ID from sessionKey "agent:main:<columnId>"
-        const parts = sessionKey?.split(":") ?? [];
-        const agentId = parts[2] ?? parts[1] ?? "main";
+        // Drop events that don't belong to any deck column
+        if (agentId === "__unroutable__") break;
 
         const session = get().sessions[agentId];
         if (!session) break;
 
-        // Skip delta/error/aborted — only act on "final" completed messages
-        if (state !== "final") break;
+        // Skip transient states; process completed/standalone messages.
+        // Gateway commonly uses state="final", but some producers may omit state.
+        if (state && state !== "final") break;
 
         // Extract text from the message content array
         const message = (payload.message ?? payload.data ?? payload.content) as Record<string, unknown> | null | undefined;
@@ -562,6 +683,9 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
           text = contentParts;
         }
 
+        // Strip Telegram metadata envelope from user messages
+        text = text.replace(/Conversation info \(untrusted metadata\):\s*```json\s*\{[^}]*\}\s*```\s*/g, "").trim();
+
         // WHITELIST FILTER — skip noise
         if (!text.trim()) break;
         if (/HEARTBEAT_OK|heartbeat/i.test(text)) break;
@@ -580,14 +704,19 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
           break;
         }
 
-        // Only render assistant/system messages (server-initiated)
-        if (role === "assistant" || role === "system") {
-          const announcementMsg: ChatMessage = {
+        // Render inbound/outbound completed messages not already tracked by the
+        // streaming 'agent' handler. Keep assistant/system as announcements, but
+        // include user messages so Telegram inbound text appears in deck chat.
+        if (role === "assistant" || role === "system" || role === "user") {
+          const mappedRole: ChatMessage["role"] =
+            role === "user" ? "user" : "announcement";
+
+          const chatMsg: ChatMessage = {
             id: makeId(),
-            role: "announcement",
+            role: mappedRole,
             text,
             timestamp: Date.now(),
-            announcement: true,
+            announcement: mappedRole === "announcement",
             runId: runId ?? undefined,
           };
 
@@ -599,7 +728,7 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
                 ...s.sessions,
                 [agentId]: {
                   ...sess,
-                  messages: [...sess.messages, announcementMsg],
+                  messages: [...sess.messages, chatMsg],
                 },
               },
             };

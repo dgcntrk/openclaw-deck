@@ -51,7 +51,7 @@ export function AddAgentModal({
     setError(null);
     try {
       await onCreate({
-        id: id || `agent-${Date.now()}`,
+        id: id || `main-${Date.now()}`,
         name: name.trim(),
         icon: icon || name.trim()[0]?.toUpperCase() || "?",
         accent,
