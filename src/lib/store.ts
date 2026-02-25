@@ -22,18 +22,23 @@ const TELEGRAM_METADATA_BLOCK_RE =
 const REPLY_ROUTING_TAG_RE = /^\s*\[\[(?:reply_to_current|reply_to:[^\]]+)\]\]\s*/g;
 
 function stripTelegramMetadataEnvelope(text: string): string {
-  return text.replace(TELEGRAM_METADATA_BLOCK_RE, "").trim();
+  return text.replace(TELEGRAM_METADATA_BLOCK_RE, "");
 }
 
 function stripReplyRoutingTags(text: string): string {
-  return text.replace(REPLY_ROUTING_TAG_RE, "").trim();
+  return text.replace(REPLY_ROUTING_TAG_RE, "");
 }
 
-function normalizeNoiseToken(text: string): string {
+export function normalizeNoiseToken(text: string): string {
   return text.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function isNoiseMessage(text: string): boolean {
+const SILENT_STREAM_TOKENS = ["NO_REPLY", "HEARTBEAT_OK"] as const;
+const NORMALIZED_SILENT_STREAM_TOKENS = SILENT_STREAM_TOKENS.map((token) =>
+  normalizeNoiseToken(token)
+);
+
+export function isNoiseMessage(text: string): boolean {
   const trimmed = text.trim();
   const token = normalizeNoiseToken(trimmed);
   const lowered = trimmed.toLowerCase();
@@ -46,6 +51,20 @@ function isNoiseMessage(text: string): boolean {
   if (lowered.includes("if nothing needs attention, reply heartbeat_ok")) return true;
 
   return token === "heartbeat_ok" || token === "no_reply";
+}
+
+export function shouldSuppressStreamingTokenPreview(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const candidate = normalizeNoiseToken(trimmed);
+  if (!candidate) return false;
+
+  // Only treat plain token-like text as suppressible while streaming.
+  // Any punctuation/numerics disambiguate immediately and release preview.
+  if (!/^[a-z_]+$/.test(candidate)) return false;
+
+  return NORMALIZED_SILENT_STREAM_TOKENS.some((token) => token.startsWith(candidate));
 }
 
 function resolveGatewayUrl(envUrl?: string): string {
@@ -122,6 +141,8 @@ function makeId(): string {
 
 // Route runIds back to their deck column even when gateway events omit sessionKey.
 const runToAgent = new Map<string, string>();
+// Holds hidden partial control-token text during streaming so it never renders.
+const hiddenStreamingBuffers = new Map<string, string>();
 // Sticky "last active" column for events that arrive without session/run context.
 let lastActiveAgentId: string | null = null;
 
@@ -559,21 +580,37 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
       const messages = hasExisting
         ? session.messages.map((msg) => {
             if (msg.runId === runId && msg.streaming) {
-              return { ...msg, text: msg.text + cleanChunk };
+              const rawSoFar = (hiddenStreamingBuffers.get(runId) ?? msg.text) + cleanChunk;
+              const hidePreview = shouldSuppressStreamingTokenPreview(rawSoFar);
+
+              if (hidePreview) {
+                hiddenStreamingBuffers.set(runId, rawSoFar);
+                return { ...msg, text: "" };
+              }
+
+              hiddenStreamingBuffers.delete(runId);
+              return { ...msg, text: rawSoFar };
             }
             return msg;
           })
-        : [
-            ...session.messages,
-            {
-              id: makeId(),
-              role: "assistant" as const,
-              text: cleanChunk,
-              timestamp: Date.now(),
-              streaming: true,
-              runId,
-            },
-          ];
+        : (() => {
+            const hidePreview = shouldSuppressStreamingTokenPreview(cleanChunk);
+            if (hidePreview) {
+              hiddenStreamingBuffers.set(runId, cleanChunk);
+            }
+
+            return [
+              ...session.messages,
+              {
+                id: makeId(),
+                role: "assistant" as const,
+                text: hidePreview ? "" : cleanChunk,
+                timestamp: Date.now(),
+                streaming: true,
+                runId,
+              },
+            ];
+          })();
 
       const activeRunIds = session.activeRunIds.includes(runId)
         ? session.activeRunIds
@@ -601,10 +638,13 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
       const session = state.sessions[agentId];
       if (!session || !session.messages) return state;
 
+      const bufferedText = hiddenStreamingBuffers.get(runId);
+      hiddenStreamingBuffers.delete(runId);
+
       const messages = (session.messages || [])
         .map((msg) => {
           if (msg.runId === runId) {
-            return { ...msg, streaming: false };
+            return { ...msg, text: bufferedText ?? msg.text, streaming: false };
           }
           return msg;
         })
