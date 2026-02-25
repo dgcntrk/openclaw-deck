@@ -166,7 +166,8 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px 4px;
-  scroll-behavior: smooth;
+  /* scroll-behavior: smooth removed — JS uses behavior:"auto" to prevent
+     continuous smooth animations during streaming from blocking click events */
 }
 
 .messages::-webkit-scrollbar {

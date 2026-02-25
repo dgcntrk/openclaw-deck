@@ -20,6 +20,11 @@ import type {
   GatewayResponse,
   GatewayEvent,
 } from "../types";
+import * as ed from "@noble/ed25519";
+
+// noble-ed25519 v2 requires setting the sha512 hash function.
+import { sha512 } from "@noble/hashes/sha2.js";
+(ed as any).hashes.sha512 = sha512;
 
 type EventHandler = (event: GatewayEvent) => void;
 type ConnectionHandler = (connected: boolean) => void;
@@ -48,7 +53,8 @@ interface GatewayClientOptions {
 interface DeviceIdentityRecord {
   id: string;
   publicKey: string; // base64url(raw 32-byte ed25519 public key)
-  privateKeyJwk: JsonWebKey;
+  privateKeyJwk?: JsonWebKey; // native WebCrypto path
+  privateKeyRaw?: string; // base64url(raw 32-byte private key) — noble polyfill path
 }
 
 const OPERATOR_SCOPES = ["operator.read", "operator.write"];
@@ -444,6 +450,19 @@ export class GatewayClient {
     return this.getStoredDeviceToken() || this.options.token || "";
   }
 
+  private async hasNativeEd25519(): Promise<boolean> {
+    try {
+      const kp = await crypto.subtle.generateKey(
+        { name: "Ed25519" } as AlgorithmIdentifier, true, ["sign", "verify"]
+      ) as CryptoKeyPair;
+      // Quick sanity: can we actually sign?
+      await crypto.subtle.sign({ name: "Ed25519" } as AlgorithmIdentifier, kp.privateKey, new Uint8Array(1));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async buildSignedDeviceIdentity(nonce?: string): Promise<{
     id: string;
     publicKey: string;
@@ -466,76 +485,117 @@ export class GatewayClient {
       nonce,
     });
 
-    const key = await crypto.subtle.importKey(
-      "jwk",
-      identity.privateKeyJwk,
-      { name: "Ed25519" } as AlgorithmIdentifier,
-      false,
-      ["sign"]
-    );
+    const payloadBytes = new TextEncoder().encode(payload);
+    let signatureBytes: Uint8Array;
 
-    const signature = await crypto.subtle.sign(
-      { name: "Ed25519" } as AlgorithmIdentifier,
-      key,
-      new TextEncoder().encode(payload)
-    );
+    if (identity.privateKeyRaw) {
+      // noble-ed25519 path (Safari < 17 fallback)
+      const privBytes = this.base64UrlDecode(identity.privateKeyRaw);
+      signatureBytes = ed.sign(payloadBytes, privBytes);
+    } else {
+      // Native WebCrypto Ed25519
+      const key = await crypto.subtle.importKey(
+        "jwk",
+        identity.privateKeyJwk!,
+        { name: "Ed25519" } as AlgorithmIdentifier,
+        false,
+        ["sign"]
+      );
+      signatureBytes = new Uint8Array(
+        await crypto.subtle.sign(
+          { name: "Ed25519" } as AlgorithmIdentifier,
+          key,
+          payloadBytes
+        )
+      );
+    }
 
     return {
       id: identity.id,
       publicKey: identity.publicKey,
-      signature: this.base64UrlEncode(new Uint8Array(signature)),
+      signature: this.base64UrlEncode(signatureBytes),
       signedAt,
       ...(nonce ? { nonce } : {}),
     };
   }
 
   private async loadOrCreateDeviceIdentity(): Promise<DeviceIdentityRecord> {
+    const useNative = await this.hasNativeEd25519();
+
     try {
       const raw = localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DeviceIdentityRecord;
-        if (parsed?.id && parsed?.publicKey && parsed?.privateKeyJwk) {
-          return parsed;
+        if (parsed?.id && parsed?.publicKey && (parsed?.privateKeyJwk || parsed?.privateKeyRaw)) {
+          // Ensure stored identity matches browser capabilities.
+          // Browsers without native Ed25519 cannot import JWK Ed25519 keys.
+          if (useNative && parsed.privateKeyJwk) return parsed;
+          if (!useNative && parsed.privateKeyRaw) return parsed;
         }
       }
     } catch {
       // ignore parse failures and recreate
     }
 
-    const keyPair = (await crypto.subtle.generateKey(
-      { name: "Ed25519" } as AlgorithmIdentifier,
-      true,
-      ["sign", "verify"]
-    )) as CryptoKeyPair;
+    if (useNative) {
+      // Native WebCrypto Ed25519
+      const keyPair = (await crypto.subtle.generateKey(
+        { name: "Ed25519" } as AlgorithmIdentifier,
+        true,
+        ["sign", "verify"]
+      )) as CryptoKeyPair;
 
-    const publicRaw = new Uint8Array(
-      await crypto.subtle.exportKey("raw", keyPair.publicKey)
-    );
-    const privateKeyJwk = (await crypto.subtle.exportKey(
-      "jwk",
-      keyPair.privateKey
-    )) as JsonWebKey;
+      const publicRaw = new Uint8Array(
+        await crypto.subtle.exportKey("raw", keyPair.publicKey)
+      );
+      const privateKeyJwk = (await crypto.subtle.exportKey(
+        "jwk",
+        keyPair.privateKey
+      )) as JsonWebKey;
 
-    const digest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", publicRaw)
-    );
-    const id = Array.from(digest)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+      const digest = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", publicRaw)
+      );
+      const id = Array.from(digest)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
 
-    const record: DeviceIdentityRecord = {
-      id,
-      publicKey: this.base64UrlEncode(publicRaw),
-      privateKeyJwk,
-    };
+      const record: DeviceIdentityRecord = {
+        id,
+        publicKey: this.base64UrlEncode(publicRaw),
+        privateKeyJwk,
+      };
 
-    try {
-      localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify(record));
-    } catch {
-      // ignore persistence failures
+      try {
+        localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify(record));
+      } catch { /* ignore */ }
+
+      return record;
+    } else {
+      // noble-ed25519 fallback for Safari < 17
+      console.log("[GatewayClient] Using noble-ed25519 polyfill (no native Ed25519)");
+      const privateKey = ed.utils.randomSecretKey();
+      const publicKey = ed.getPublicKey(privateKey);
+
+      const digest = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", publicKey)
+      );
+      const id = Array.from(digest)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      const record: DeviceIdentityRecord = {
+        id,
+        publicKey: this.base64UrlEncode(publicKey),
+        privateKeyRaw: this.base64UrlEncode(privateKey),
+      };
+
+      try {
+        localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify(record));
+      } catch { /* ignore */ }
+
+      return record;
     }
-
-    return record;
   }
 
   private buildDeviceAuthPayload(params: {
@@ -566,6 +626,15 @@ export class GatewayClient {
       base.push(params.nonce ?? "");
     }
     return base.join("|");
+  }
+
+  private base64UrlDecode(str: string): Uint8Array {
+    const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   }
 
   private base64UrlEncode(bytes: Uint8Array): string {

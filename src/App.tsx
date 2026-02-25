@@ -13,6 +13,7 @@ import "./App.css";
 function getGatewayConfig() {
   const params = new URLSearchParams(window.location.search);
   let gatewayUrl =
+    params.get("gatewayUrl") ||
     params.get("gateway") ||
     import.meta.env.VITE_GATEWAY_URL ||
     "/ws";
@@ -33,7 +34,6 @@ function getGatewayConfig() {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("All Agents");
   const [showAddModal, setShowAddModal] = useState(false);
   const [initialAgents, setInitialAgents] = useState<AgentConfig[]>([]);
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([]);
@@ -116,11 +116,7 @@ export default function App() {
 
   return (
     <div className="deck-root">
-      <TopBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onAddAgent={() => setShowAddModal(true)}
-      />
+      <TopBar onAddAgent={() => setShowAddModal(true)} />
 
       <div className="deck-columns">
         {columnOrder.map((agentId, index) => (

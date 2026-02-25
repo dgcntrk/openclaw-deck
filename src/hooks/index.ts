@@ -46,7 +46,8 @@ export function useAgentConfig(agentId: string): AgentConfig | undefined {
 }
 
 /**
- * Send a message to an agent. Returns a stable callback.
+ * Send a message to an agent. Returns a stable callback that resolves to
+ * true when the send was accepted, false otherwise.
  */
 export function useSendMessage(agentId: string) {
   const sendMessage = useDeckStore((s) => s.sendMessage);
@@ -58,14 +59,49 @@ export function useSendMessage(agentId: string) {
 
 /**
  * Auto-scroll a container to bottom when content changes.
+ *
+ * Design goals:
+ *  1. Scroll to bottom on new messages AND on streaming chunks.
+ *  2. Do NOT scroll if the user has manually scrolled up to read history.
+ *  3. Resume auto-scroll when the user scrolls back near the bottom.
+ *  4. Use behavior:"auto" (instant) — no smooth animations during streaming,
+ *     which previously caused continuous scroll animations that blocked clicks.
+ *
+ * Implementation:
+ *  - A scroll event listener tracks a "lockedToBottom" ref. When the user
+ *    scrolls up more than 120px from the bottom, lock is released. When they
+ *    scroll back within 120px, lock is re-acquired.
+ *  - The dep effect only scrolls when lockedToBottom is true.
+ *  - Callers should pass a dep that changes on BOTH new messages and streaming
+ *    chunks (e.g. a string combining message count + last streaming text length).
  */
 export function useAutoScroll(dep: unknown) {
   const ref = useRef<HTMLDivElement>(null);
+  // Starts locked; updated by the scroll listener below.
+  const lockedRef = useRef(true);
 
+  // Attach a scroll listener once to track whether the user has scrolled up.
   useEffect(() => {
     const el = ref.current;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el) return;
+
+    const onScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      lockedRef.current = distanceFromBottom < 120;
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []); // attach once, ref is stable
+
+  // Scroll to bottom whenever dep changes, but only if locked to bottom.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    if (lockedRef.current) {
+      // behavior:"auto" = instant, no ongoing animation → clicks never blocked.
+      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
     }
   }, [dep]);
 

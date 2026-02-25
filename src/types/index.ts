@@ -96,8 +96,10 @@ export interface AgentSession {
   agentId: string;
   status: AgentStatus;
   messages: ChatMessage[];
-  /** Current streaming run ID */
+  /** Most recently active run ID (for legacy single-run UI paths) */
   activeRunId: string | null;
+  /** All currently active run IDs for overlap-safe tracking */
+  activeRunIds: string[];
   /** Token count for this session */
   tokenCount: number;
   /** Whether the WS connection to this agent's session is live */

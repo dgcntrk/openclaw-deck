@@ -4,15 +4,9 @@ import { useDeckStore } from "../lib/store";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import styles from "./TopBar.module.css";
 
-const TABS = ["All Agents", "Active", "Queued", "Completed"] as const;
-
 export function TopBar({
-  activeTab,
-  onTabChange,
   onAddAgent,
 }: {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
   onAddAgent: () => void;
 }) {
   const stats = useDeckStats();
@@ -63,33 +57,12 @@ export function TopBar({
 
   return (
     <div className={styles.bar}>
-      {/* Logo */}
       <div className={styles.logo}>
         <div className={styles.logoIcon}>◈</div>
         <span className={styles.logoText}>OpenClaw</span>
         <span className={styles.logoBadge}>DECK</span>
       </div>
 
-      {/* Tabs */}
-      <div className={styles.tabs}>
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            className={`${styles.tab} ${activeTab === tab ? styles.tabActive : ""}`}
-            onClick={() => onTabChange(tab)}
-          >
-            {tab}
-            {tab === "All Agents" && (
-              <span className={styles.tabCount}>{stats.totalAgents}</span>
-            )}
-            {tab === "Active" && stats.active > 0 && (
-              <span className={styles.tabCount}>{stats.active}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Stats */}
       <div className={styles.stats}>
         <div className={styles.stat}>
           <div
@@ -104,7 +77,7 @@ export function TopBar({
                 color: stats.gatewayConnected ? "#34d399" : "#ef4444",
               }}
             >
-              {stats.active}
+              {stats.streaming}
             </span>{" "}
             streaming
           </span>

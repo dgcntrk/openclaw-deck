@@ -59,12 +59,12 @@ export async function fetchGatewayConfig(
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   try {
-    // Try common proxied paths; some setups expose one but not the other.
+    // Prefer Vite proxy path first to avoid hitting Vite origin /config (HTML/404).
     let config: any;
     try {
-      config = await fetchConfigJson("/config", headers);
-    } catch {
       config = await fetchConfigJson("/api/config", headers);
+    } catch {
+      config = await fetchConfigJson("/config", headers);
     }
 
     const modelList = normalizeModelMap(config);
@@ -110,8 +110,8 @@ export function buildDefaultAgents(
   ];
 
   return Array.from({ length: count }, (_, i) => {
-    const agentId = i === 0 ? "main" : `main-${i + 1}`;
-    const agentName = i === 0 ? "Main" : `Main ${i + 1}`;
+    const agentId = i === 0 ? "main" : `agent-${i + 1}`;
+    const agentName = i === 0 ? "Main" : `Agent ${i + 1}`;
 
     return {
       id: agentId,

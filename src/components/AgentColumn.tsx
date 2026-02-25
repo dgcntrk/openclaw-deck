@@ -104,6 +104,8 @@ function MessageBubble({
       >
         {isUser ? (
           message.text
+        ) : message.streaming ? (
+          <span>{message.text}</span>
         ) : (
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -136,17 +138,21 @@ function AnnouncementBubble({
     <div className={styles.announcementBubble}>
       <div className={styles.announcementLabel}>🔔 Sub-agent</div>
       <div className={styles.announcementText}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
-          components={{
-            a: ({ node, ...props }) => (
-              <a {...props} target="_blank" rel="noopener noreferrer" />
-            ),
-          }}
-        >
-          {message.text}
-        </ReactMarkdown>
+        {message.streaming ? (
+          <span>{message.text}</span>
+        ) : (
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={{
+              a: ({ node, ...props }) => (
+                <a {...props} target="_blank" rel="noopener noreferrer" />
+              ),
+            }}
+          >
+            {message.text}
+          </ReactMarkdown>
+        )}
         {message.streaming && (
           <span className={styles.cursor} style={{ backgroundColor: "#f59e0b" }} />
         )}
@@ -222,7 +228,22 @@ export function AgentColumn({ agentId, columnIndex }: { agentId: string; columnI
   const deleteAgentOnGateway = useDeckStore((s) => s.deleteAgentOnGateway);
   const [input, setInput] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const scrollRef = useAutoScroll(session?.messages);
+  // Build a scroll dep that changes on:
+  //   (a) new messages being added  → messages.length changes
+  //   (b) streaming chunks arriving  → actively streaming message text.length changes
+  // We search for the streaming message rather than assuming it's the last one,
+  // because chat/cron/heartbeat messages can arrive and get inserted before the
+  // streaming placeholder, causing the placeholder to be non-last.
+  // Since we use behavior:"auto" (instant) there is no ongoing animation, so
+  // firing on every chunk is safe — the viewport settles immediately and clicks
+  // are never blocked. The scroll only fires when the user is near the bottom
+  // (tracked by a scroll listener inside useAutoScroll).
+  const msgs = session?.messages ?? [];
+  const streamingMsg = msgs.length > 0
+    ? msgs.slice().reverse().find((m) => m.streaming)
+    : undefined;
+  const scrollDep = `${msgs.length}:${streamingMsg?.text.length ?? 0}`;
+  const scrollRef = useAutoScroll(scrollDep);
 
   if (!config || !session) return null;
 
@@ -231,17 +252,28 @@ export function AgentColumn({ agentId, columnIndex }: { agentId: string; columnI
   const totalTokens = session.usage?.totalTokens || session.tokenCount || 0;
   const contextPercent = contextWindow > 0 ? (totalTokens / contextWindow) * 100 : 0;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim();
     if (!text) return;
+
+    const outgoingText = input;
     setInput("");
-    send(text);
+
+    try {
+      const sent = await send(text);
+      if (!sent) {
+        setInput(outgoingText);
+      }
+    } catch (error) {
+      setInput(outgoingText);
+      throw error;
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     } else if (e.key === "Tab") {
       const offset = e.shiftKey ? -1 : 1;
       const next = document.querySelector<HTMLTextAreaElement>(
@@ -312,7 +344,7 @@ export function AgentColumn({ agentId, columnIndex }: { agentId: string; columnI
           </div>
         </div>
         <div className={styles.headerActions}>
-          <button className={styles.headerBtn} title="Settings">
+          <button className={styles.headerBtn} title="Settings (coming soon)" disabled>
             ⚙
           </button>
           <button
@@ -372,7 +404,7 @@ export function AgentColumn({ agentId, columnIndex }: { agentId: string; columnI
           />
           <button
             className={styles.sendBtn}
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={!input.trim()}
             style={
               input.trim()

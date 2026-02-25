@@ -108,11 +108,14 @@ export function AddAgentModal({
           <label className={styles.label}>Color</label>
           <div className={styles.colors}>
             {ACCENTS.map((c) => (
-              <div
+              <button
                 key={c}
+                type="button"
                 className={`${styles.colorSwatch} ${accent === c ? styles.colorSwatchActive : ""}`}
                 style={{ backgroundColor: c }}
                 onClick={() => setAccent(c)}
+                aria-label={`Select ${c} color`}
+                aria-pressed={accent === c}
               />
             ))}
           </div>
