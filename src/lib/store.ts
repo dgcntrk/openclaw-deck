@@ -19,8 +19,14 @@ const ENV_GATEWAY_TOKEN = (import.meta.env.VITE_GATEWAY_TOKEN as string | undefi
 const TELEGRAM_METADATA_BLOCK_RE =
   /Conversation info \(untrusted metadata\):\s*```json\s*[\s\S]*?```\s*/gi;
 
+const REPLY_ROUTING_TAG_RE = /^\s*\[\[(?:reply_to_current|reply_to:[^\]]+)\]\]\s*/g;
+
 function stripTelegramMetadataEnvelope(text: string): string {
   return text.replace(TELEGRAM_METADATA_BLOCK_RE, "").trim();
+}
+
+function stripReplyRoutingTags(text: string): string {
+  return text.replace(REPLY_ROUTING_TAG_RE, "").trim();
 }
 
 function normalizeNoiseToken(text: string): string {
@@ -30,15 +36,14 @@ function normalizeNoiseToken(text: string): string {
 function isNoiseMessage(text: string): boolean {
   const trimmed = text.trim();
   const token = normalizeNoiseToken(trimmed);
+  const lowered = trimmed.toLowerCase();
 
   if (trimmed.startsWith("[System Message]")) return true;
-  if (
-    trimmed
-      .toLowerCase()
-      .includes("a completed subagent task is ready for user delivery")
-  ) {
+  if (lowered.includes("a completed subagent task is ready for user delivery")) {
     return true;
   }
+  if (trimmed.startsWith("Read HEARTBEAT.md") || lowered.includes("read heartbeat.md")) return true;
+  if (lowered.includes("if nothing needs attention, reply heartbeat_ok")) return true;
 
   return token === "heartbeat_ok" || token === "no_reply";
 }
@@ -291,8 +296,8 @@ function parseHistoryMessages(
       text = msg.content;
     }
 
-    // Strip Telegram metadata envelope from user messages
-    text = stripTelegramMetadataEnvelope(text);
+    // Strip Telegram metadata envelope and internal routing tags
+    text = stripReplyRoutingTags(stripTelegramMetadataEnvelope(text));
 
     // Skip empty and noise messages
     const trimmedText = text.trim();
@@ -549,11 +554,12 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
 
       const existingIdx = session.messages.findIndex((msg) => msg.runId === runId);
       const hasExisting = existingIdx >= 0;
+      const cleanChunk = stripReplyRoutingTags(chunk);
 
       const messages = hasExisting
         ? session.messages.map((msg) => {
             if (msg.runId === runId && msg.streaming) {
-              return { ...msg, text: msg.text + chunk };
+              return { ...msg, text: msg.text + cleanChunk };
             }
             return msg;
           })
@@ -562,7 +568,7 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
             {
               id: makeId(),
               role: "assistant" as const,
-              text: chunk,
+              text: cleanChunk,
               timestamp: Date.now(),
               streaming: true,
               runId,
@@ -579,7 +585,7 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
           [agentId]: {
             ...session,
             messages,
-            tokenCount: session.tokenCount + chunk.length, // approximate
+            tokenCount: session.tokenCount + cleanChunk.length,
             activeRunId: runId,
             activeRunIds,
             status: "streaming",
@@ -892,8 +898,8 @@ export const useDeckStore = create<DeckStore>((set, get) => ({
           text = contentParts;
         }
 
-        // Strip Telegram metadata envelope from user messages
-        text = stripTelegramMetadataEnvelope(text);
+        // Strip Telegram metadata envelope and internal routing tags
+        text = stripReplyRoutingTags(stripTelegramMetadataEnvelope(text));
 
         // WHITELIST FILTER — skip noise
         const trimmedText = text.trim();
